@@ -70,7 +70,7 @@ some interesting and useful features written by lua
 
 ## flow —— 简化和明晰过程的一些工具函数
 
-命名空间：flow
+命名空间：__flow__
 
 * flow.waterfall(...) : 
 ```
