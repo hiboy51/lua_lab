@@ -8,7 +8,7 @@ if fn then return fn end
 
 fn = {}
 
-DO_TEST = DO_TEST or true
+DO_TEST = DO_TEST or false
 
 -- 扩展table
 -- 判断表是否连续
