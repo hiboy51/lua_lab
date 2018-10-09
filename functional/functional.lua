@@ -41,8 +41,9 @@ fn.foreach = function (t, loopFunc)
     
     local ok, err = true, nil;
     for k, v in pairs(t) do
-        ok, err = pcall(loopFunc, k, v, t)
-        if err then error(err) end
+        -- ok, err = pcall(loopFunc, k, v, t)
+        -- if err then error(err) end
+        loopFunc(k, v, t)
     end
 end
 
@@ -54,15 +55,10 @@ fn.map = function(loop)
         assert(t, "map: noly table can be loop")
         
         local result = {}
-        local ok, err, nk, nv
+        local nk, nv
         for k, v in pairs(t) do 
-            ok, err, nv = pcall(loop, k, v, t)
-            if ok then
-                nk = err
-                result[nk] = nv
-            else
-                error(err)
-            end
+            nk, nv = loop(k, v, t)
+            result[nk] = nv
         end
         
         setmetatable(result, fnMeta)
@@ -135,10 +131,12 @@ fn.every = function(t, loop)
 
     local ok, err
     for k, v in pairs(t) do 
-        ok, err = pcall(loop, k, v, t)
+        -- ok, err = pcall(loop, k, v, t)
 
+        -- if not ok then return false end
+        -- if not err then return false end
+        ok = loop(k, v, t)
         if not ok then return false end
-        if not err then return false end
     end
 
     return true
