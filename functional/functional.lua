@@ -24,7 +24,7 @@ table.continuous = function(t)
 end
 
 local fnMeta = {
-    __shr = function(lhs, rhs) 
+    __mul = function(lhs, rhs) 
         local result = rhs(lhs)
         if (type(result) == "table") then
             setmetatable(result, getmetatable(lhs)) 
@@ -39,10 +39,10 @@ local fnMeta = {
 fn.foreach = function (t, loopFunc)
     assert(t, "foreach: noly table can be loop")
     
+    loopFunc = loopFunc or function(k, v, t) end
+
     local ok, err = true, nil;
     for k, v in pairs(t) do
-        -- ok, err = pcall(loopFunc, k, v, t)
-        -- if err then error(err) end
         loopFunc(k, v, t)
     end
 end
@@ -51,6 +51,9 @@ end
 -- @param t: table
 -- @param loop: (k, v, t) => nk, nv
 fn.map = function(loop)
+    loop = loop or function(k, v, t) 
+        return k, v
+    end
     return function (t) 
         assert(t, "map: noly table can be loop")
         
@@ -72,6 +75,7 @@ end
 fn.sort = function(loop) 
     return function(t)
         assert(t, "sort: noly table can be loop")
+        assert(table.continuous(t), "sort: noly continuous array can be sort")
         
         table.sort(t, loop)
 
@@ -84,10 +88,11 @@ end
 -- @param t: table
 -- @param loop: (k, v, t) => bool
 fn.filter = function(loop)
+    loop = loop or function(k, v, t) return true end
+
     return function(t)
         assert(t, "filter: noly table can be loop")
         local result = {}
-        
         
         if table.continuous(t) then
             for _, v in ipairs(t) do 
@@ -128,13 +133,10 @@ end
 -- @param loop: (t, v, t) => bool
 fn.every = function(t, loop) 
     assert(t, "every: noly table can be loop")
+    loop = loop or function(k, v, t) return false end
 
-    local ok, err
+    local ok
     for k, v in pairs(t) do 
-        -- ok, err = pcall(loop, k, v, t)
-
-        -- if not ok then return false end
-        -- if not err then return false end
         ok = loop(k, v, t)
         if not ok then return false end
     end
@@ -147,12 +149,11 @@ end
 -- @param loop: (k, v, t) => bool
 fn.some = function(t, loop)
     assert(t, "some: noly table can be loop")
-
-    local ok, err
+    loop = loop or function(k, v, t) return false end
+    local ok
     for k, v in pairs(t) do 
-        ok, err = pcall(loop, k, v, t)
-        if not ok then error(err) end
-        if err then return true end
+        ok = loop(k, v, t)
+        if ok then return true end
     end
 
     return false
@@ -161,23 +162,37 @@ end
 -- 归纳
 -- @param t: table
 -- @param loop: (pre, curk, curv, t) => nk, nv
-fn.reduce = function(t, loop) 
+fn.reduce = function(t, loop, startK, startV) 
     assert(t, "reduce: noly table can be loop")
     
-    local ok, err, nk, nv
-    local start = false
+    local nk = startK
+    local nv = startV
+
     for k, v in pairs(t) do
-        if not start then
-            start = true;
-            nk, nv = k, v
-        else
-            ok, err, nv = pcall(loop, nk, nv, k, v, t)
-            if not ok then error(err) end
-            nk = err
-        end
+        nk, nv = loop(nk, nv, k, v, t)
     end
 
     return nk, nv
+end
+
+-- 归纳 k 值
+-- reduce的k值特化版本
+-- loop:: (sum, curK) => newK 
+fn.reduceK = function(t, sum, loop) 
+    local rk, _ = fn.reduce(t, function(k, v, nk, nv) 
+        return loop(k, nk), nil
+    end, sum, nil)
+    return rk
+end
+
+-- 归纳 v 值
+-- reduce的k值特化版本
+-- loop:: (sum, curV) => newV 
+fn.reduceV = function(t, sum, loop) 
+    local _, rv = fn.reduce(t, function(k, v, nk, nv)
+        return nil, loop(v, nv)
+    end, nil, sum)
+    return rv
 end
 
 -- ----------------------------------------------------------------
@@ -220,20 +235,20 @@ if DO_TEST then
         ck = ck .. k
         cv = cv .. v
         return ck, cv
-    end)
+    end, "", "")
     print("reduce test:".. kk .. "," .. vv)
     
     --test5
     local newTable = fn.chain(t1, fn.map, function(k, v, t) 
         return v, k
-    end) >> fn.filter(function(k, v, t)
+    end) * fn.filter(function(k, v, t)
         return v < 3
-    end) >> fn.map(function(k, v, t) 
+    end) * fn.map(function(k, v, t) 
         -- local num = string.sub(k, 0, 1)
         -- num = tonumber(num)
         -- return num < 3 
         return v..k, k..v
-    end) >> fn.map(function(k, v, t)
+    end) * fn.map(function(k, v, t)
         return v .. "__", k .. "__" 
     end)
     print("map test:")
@@ -252,6 +267,43 @@ if DO_TEST then
 end
 -- ----------------------------------------------------------------
 -- ----------------------------------------------------------------
+
+function fn.read_only(inputTable)
+    local travelled_tables = {}
+    local function __read_only(tbl)
+        if not travelled_tables[tbl] then
+            local tbl_mt = getmetatable(tbl)
+            if not tbl_mt then
+                tbl_mt = {}
+                setmetatable(tbl, tbl_mt)
+            end
+
+            local proxy = tbl_mt.__read_only_proxy
+            if not proxy then
+                proxy = {}
+                tbl_mt.__read_only_proxy = proxy
+                local proxy_mt = {
+                    __index = tbl,
+                    __newindex = function (t, k, v) error("error write to a read-only table with key = " .. tostring(k)) end,
+                    __pairs = function (t) return pairs(tbl) end,
+                    -- __ipairs = function (t) return ipairs(tbl) end,   5.3版本不需要此方法
+                    __len = function (t) return #tbl end,
+                    __read_only_proxy = proxy
+                }
+                setmetatable(proxy, proxy_mt)
+            end
+            travelled_tables[tbl] = proxy
+            for k, v in pairs(tbl) do
+                if type(v) == "table" then
+                    tbl[k] = __read_only(v)
+                end
+            end
+        end
+        return travelled_tables[tbl]
+    end
+    return __read_only(inputTable)
+end
+
 
 return fn
 

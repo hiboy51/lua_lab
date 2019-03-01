@@ -8,7 +8,7 @@
 if flow then return flow end
 flow = {}
 
-DO_TEST = DO_TEST or true
+DO_TEST = DO_TEST or false
 
 -- 瀑布流
 -- 避免回调嵌套
@@ -17,7 +17,7 @@ function flow.waterfall(...)
     if #args == 0 then return end
     local first = table.remove(args, 1)
     first(function() 
-        flow.waterfall(table.unpack(args))
+        flow.waterfall(unpack(args))
     end)
 end
 
@@ -33,8 +33,8 @@ end
 -- 配合在flow.async执行块中使用
 function flow.await(dothings)
     local co, sync, ret =  nil, false, {}
-    function ret:ret() 
-        return table.unpack(self.result)
+    function ret:ret()
+        return unpack(self.result)
     end
     dothings(function(...)
         ret.result = {...}
@@ -51,6 +51,7 @@ function flow.await(dothings)
 
     co = coroutine.running()
     coroutine.yield(ret)
+    return ret
 end
 
 -- --------------------------------------------------------------------------------------
