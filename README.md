@@ -48,14 +48,14 @@ some interesting and useful features written by lua
 
 * fn.some(t, loop)  
 ```
-    newTable = fn.some(table, function(k, v, t) 
+    tureOrFalse = fn.some(table, function(k, v, t) 
         ...
     end)
 ```
 
 * fn.every(t, loop)
 ```
-    newTable = fn.every(table, function(k, v, t) 
+    trueOrFalse = fn.every(table, function(k, v, t) 
         ...
     end)
 ```
